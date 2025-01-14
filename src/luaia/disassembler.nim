@@ -254,7 +254,9 @@ type FunctionData = object
     constants: seq[LuaVariant]
     upvalues: seq[UpValue]
     functions: seq[FunctionData]
+    
     debug_line_info: seq[uint8]
+    debug_abs_line_info: seq[tuple[pc: int, line: int]]
     debug_local_vars: seq[tuple[name: string, start_pc: int, end_pc: int]]
     debug_upvalues_names: seq[string]
 
@@ -343,6 +345,12 @@ func extractFunction(s: ptr string, i: var int, header: ptr ChunkHeader): Functi
         i += 1
     
     b = cast[int64](s.readSize i)
+    result.debug_abs_line_info.setLen b
+    for j in 0..<b:
+        result.debug_abs_line_info[j].pc = cast[int](s.readSize i)
+        result.debug_abs_line_info[j].line = cast[int](s.readSize i)
+    
+    b = cast[int64](s.readSize i)
     result.debug_local_vars.setLen b
     for j in 0..<b:
         result.debug_local_vars[j].name = s.readString i
@@ -350,12 +358,11 @@ func extractFunction(s: ptr string, i: var int, header: ptr ChunkHeader): Functi
         result.debug_local_vars[j].start_pc = cast[int](s.readSize i)
     
     b = cast[int64](s.readSize i)
+    if b != 0: b = result.upvalues.len # NOTE: the original comment from lua source: /* must be this many */
     result.debug_upvalues_names.setLen b
     for j in 0..<b:
          result.debug_upvalues_names[j] = s.readString i
-         i += 2 # NOTE: i dont know what is this offset thing
     
-    i += 6 # NOTE: the _ENV thing idk
 
 
 
@@ -385,6 +392,7 @@ func disassemble*(s: string): tuple[header: ChunkHeader, function: FunctionData]
     i += 1 # NOTE: bypass upvalue size thing since I dont understand
 
     result.function = s.addr.extractFunction(i, result.header.addr)
+
 
     if i != s.len:
         raise CatchableError.newException("Binary might be corrupt.")
